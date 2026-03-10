@@ -238,6 +238,12 @@
     </div>
 
     <hr class="modal-divider">
+    <div class="form-label" style="margin-bottom:6px;">Personas que realizan observaciones de aula</div>
+    <div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">Puede ser el/la Jefe/a UTP, Director/a, Coordinador/a u otro cargo según su establecimiento.</div>
+    <div id="setupObservadores"></div>
+    <button class="btn-add-doc" onclick="addSetupObsRow()">+ Agregar observador/a</button>
+
+    <hr class="modal-divider">
     <div class="form-label" style="margin-bottom:10px;">Docentes del establecimiento</div>
     <div id="setupDocentes"></div>
     <button class="btn-add-doc" onclick="addSetupDocRow()">+ Agregar docente</button>
@@ -274,11 +280,7 @@
     </div>
     <div class="sidebar-section">
       <div class="sidebar-title">Observadores</div>
-      <div class="obs-filters">
-        <div class="obs-filter-item"><div class="obs-dot" style="background:#2d5f8a"></div><span class="obs-label">Jefe/a UTP</span><span class="obs-count" id="cntUtp">0</span></div>
-        <div class="obs-filter-item"><div class="obs-dot" style="background:#2d6a4f"></div><span class="obs-label">Director/a</span><span class="obs-count" id="cntDir">0</span></div>
-        <div class="obs-filter-item"><div class="obs-dot" style="background:#8b2fc9"></div><span class="obs-label">Ext. / Asesor</span><span class="obs-count" id="cntExt">0</span></div>
-      </div>
+      <div class="obs-filters" id="obsFiltersList"></div>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-title">Resumen año <span id="sidebarAnio">2025</span></div>
@@ -343,11 +345,7 @@
       </div>
       <div class="form-row" style="margin:0">
         <label class="form-label">Observador/a</label>
-        <select class="form-control" id="fObservador">
-          <option value="UTP">Jefe/a UTP</option>
-          <option value="DIR">Director/a</option>
-          <option value="EXT">Asesor externo</option>
-        </select>
+        <select class="form-control" id="fObservador"></select>
       </div>
     </div>
     <div class="form-row-2" style="margin-top:14px;">
@@ -422,6 +420,12 @@
     </div>
 
     <hr class="modal-divider">
+    <div class="form-label" style="margin-bottom:6px;">Observadores de aula</div>
+    <div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">Personas que realizan observaciones en su establecimiento.</div>
+    <div id="cfgObservadores" style="max-height:160px;overflow-y:auto;padding-right:4px;"></div>
+    <button class="btn-add-doc" onclick="addCfgObsRow()">+ Agregar observador/a</button>
+
+    <hr class="modal-divider">
     <div class="form-label" style="margin-bottom:10px;">Docentes</div>
     <div id="cfgDocentes" style="max-height:220px;overflow-y:auto;padding-right:4px;"></div>
     <button class="btn-add-doc" onclick="addCfgDocRow()">+ Agregar docente</button>
@@ -456,10 +460,24 @@ function getSigla(nombre) {
   return nombre.substring(0,2).toUpperCase();
 }
 
-function getColor(obs) {
-  if(obs==="UTP") return { cls:"c-utp", tag:"tag-utp", dot:"#2d5f8a", label:"Jefe/a UTP" };
-  if(obs==="DIR") return { cls:"c-dir", tag:"tag-dir", dot:"#2d6a4f", label:"Director/a" };
-  return { cls:"c-ext", tag:"tag-ext", dot:"#8b2fc9", label:"Ext./Asesor" };
+const OBS_COLORES_DEFAULT = ["#2d5f8a","#2d6a4f","#8b2fc9","#b5451b","#0d6e8c","#8a6400","#7a3520","#1a3a5c"];
+
+function getObsColor(obsId) {
+  const obs = OBSERVADORES.find(o => o.id === obsId || o.id === String(obsId));
+  if(obs) return { cls:'c-obs-'+obs.id, tag:'tag-obs-'+obs.id, dot: obs.color, label: obs.nombre };
+  // fallback
+  return { cls:'c-ext', tag:'tag-ext', dot:'#8b2fc9', label: obsId||'Observador' };
+}
+
+// Inyecta estilos dinámicos para chips y badges de observadores
+function injectObsStyles() {
+  let style = document.getElementById('obsStyles');
+  if(!style){ style = document.createElement('style'); style.id='obsStyles'; document.head.appendChild(style); }
+  style.textContent = OBSERVADORES.map(obs => `
+    .c-obs-${obs.id} { background: ${obs.color}22; border-left: 3px solid ${obs.color}; }
+    .c-obs-${obs.id} .chip-dot { background: ${obs.color}; }
+    .tag-obs-${obs.id} { background: ${obs.color}22; color: ${obs.color}; border: 1px solid ${obs.color}66; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  `).join('');
 }
 
 // =============================================
@@ -470,6 +488,7 @@ let CONFIG = {
 };
 let DOCENTES = [];
 let VISITAS = [];
+let OBSERVADORES = [];
 let currentDate = new Date();
 let isCalView = true;
 let selectedDocId = null;
@@ -483,16 +502,27 @@ function saveAll() {
   localStorage.setItem('utp_config', JSON.stringify(CONFIG));
   localStorage.setItem('utp_docentes', JSON.stringify(DOCENTES));
   localStorage.setItem('utp_visitas', JSON.stringify(VISITAS));
+  localStorage.setItem('utp_observadores', JSON.stringify(OBSERVADORES));
   showToast("💾 Guardado automáticamente");
 }
 
 function loadAll() {
-  const cfg = localStorage.getItem('utp_config');
+  const cfg  = localStorage.getItem('utp_config');
   const docs = localStorage.getItem('utp_docentes');
-  const vis = localStorage.getItem('utp_visitas');
-  if(cfg) CONFIG = JSON.parse(cfg);
-  if(docs) DOCENTES = JSON.parse(docs);
-  if(vis) VISITAS = JSON.parse(vis);
+  const vis  = localStorage.getItem('utp_visitas');
+  const obs  = localStorage.getItem('utp_observadores');
+  if(cfg)  CONFIG      = JSON.parse(cfg);
+  if(docs) DOCENTES    = JSON.parse(docs);
+  if(vis)  VISITAS     = JSON.parse(vis);
+  if(obs)  OBSERVADORES = JSON.parse(obs);
+  // Migración: si no hay observadores guardados, crear los 3 por defecto
+  if(!obs || OBSERVADORES.length === 0) {
+    OBSERVADORES = [
+      { id:'obs1', nombre:'Jefe/a UTP',    color:'#2d5f8a' },
+      { id:'obs2', nombre:'Director/a',    color:'#2d6a4f' },
+      { id:'obs3', nombre:'Asesor externo',color:'#8b2fc9' },
+    ];
+  }
 }
 
 function isConfigured() {
@@ -528,6 +558,42 @@ function addSetupDocRow(nombre="", asig="") {
   container.appendChild(row);
 }
 
+function addSetupObsRow(nombre="", color="") {
+  const container = document.getElementById('setupObservadores');
+  const idx = container.children.length;
+  const defColor = color || OBS_COLORES_DEFAULT[idx % OBS_COLORES_DEFAULT.length];
+  const row = document.createElement('div');
+  row.className = 'docente-row';
+  row.innerHTML = `
+    <input type="text" class="form-control" placeholder="Ej: Jefe/a UTP, Director/a, Coordinador/a..." value="${nombre}" style="flex:2">
+    <input type="color" value="${defColor}" style="width:38px;height:36px;border:1px solid var(--border);border-radius:7px;cursor:pointer;padding:2px;background:white;flex-shrink:0" title="Color en el calendario">
+    <button class="btn-remove" onclick="this.parentElement.remove()">×</button>`;
+  container.appendChild(row);
+}
+
+function addCfgObsRow(nombre="", color="", id=null) {
+  const container = document.getElementById('cfgObservadores');
+  const idx = container.children.length;
+  const defColor = color || OBS_COLORES_DEFAULT[idx % OBS_COLORES_DEFAULT.length];
+  const row = document.createElement('div');
+  row.className = 'docente-row';
+  row.dataset.obsId = id || '';
+  row.innerHTML = `
+    <input type="text" class="form-control" placeholder="Nombre del observador/a o cargo..." value="${nombre}" style="flex:2">
+    <input type="color" value="${defColor}" style="width:38px;height:36px;border:1px solid var(--border);border-radius:7px;cursor:pointer;padding:2px;background:white;flex-shrink:0" title="Color en el calendario">
+    <button class="btn-remove" onclick="this.parentElement.remove()">×</button>`;
+  container.appendChild(row);
+}
+
+function getObsFromRows(selector) {
+  return Array.from(document.querySelectorAll(selector+' .docente-row')).map((row, i) => {
+    const nombre = row.querySelector('input[type=text]').value.trim();
+    const color  = row.querySelector('input[type=color]').value;
+    const id     = row.dataset.obsId || ('obs_' + Date.now() + '_' + i);
+    return nombre ? { id, nombre, color } : null;
+  }).filter(Boolean);
+}
+
 function saveSetup() {
   const escuela = document.getElementById('setupNombreEsc').value.trim();
   const utp = document.getElementById('setupNombreUtp').value.trim();
@@ -535,6 +601,9 @@ function saveSetup() {
   const meta = parseInt(document.getElementById('setupMeta').value);
 
   if(!escuela || !utp) { showToast("⚠️ Ingrese el nombre del establecimiento y del/la Jefe/a UTP"); return; }
+
+  const obs = getObsFromRows('#setupObservadores');
+  if(obs.length === 0) { showToast("⚠️ Agregue al menos un observador/a"); return; }
 
   const rows = document.querySelectorAll('#setupDocentes .docente-row');
   const docs = [];
@@ -548,6 +617,7 @@ function saveSetup() {
 
   CONFIG = { escuela, utp, anio, meta };
   DOCENTES = docs;
+  OBSERVADORES = obs;
   VISITAS = [];
 
   saveAll();
@@ -559,11 +629,17 @@ function saveSetup() {
 // CONFIGURACIÓN (editar)
 // =============================================
 function openConfig() {
-  document.getElementById('cfgEsc').value = CONFIG.escuela;
-  document.getElementById('cfgUtp').value = CONFIG.utp;
+  document.getElementById('cfgEsc').value  = CONFIG.escuela;
+  document.getElementById('cfgUtp').value  = CONFIG.utp;
   document.getElementById('cfgAnio').value = CONFIG.anio;
   document.getElementById('cfgMeta').value = CONFIG.meta;
 
+  // Observadores
+  const obsContainer = document.getElementById('cfgObservadores');
+  obsContainer.innerHTML = '';
+  OBSERVADORES.forEach(o => addCfgObsRow(o.nombre, o.color, o.id));
+
+  // Docentes
   const container = document.getElementById('cfgDocentes');
   container.innerHTML = '';
   DOCENTES.forEach(d => addCfgDocRow(d.nombre, d.asignatura, d.id));
@@ -571,28 +647,16 @@ function openConfig() {
   document.getElementById('configOverlay').classList.add('open');
 }
 
-function addCfgDocRow(nombre="", asig="", id=null) {
-  const container = document.getElementById('cfgDocentes');
-  const row = document.createElement('div');
-  row.className = 'docente-row';
-  row.dataset.id = id || '';
-  row.innerHTML = `
-    <input type="text" class="form-control" placeholder="Nombre completo" value="${nombre}" style="flex:2">
-    <select class="form-control" style="flex:1.2">
-      ${ASIGNATURAS.map(a => `<option ${a===asig?'selected':''}>${a}</option>`).join('')}
-      <option ${!ASIGNATURAS.includes(asig)?'selected':''} value="${asig||'Otra'}">${asig && !ASIGNATURAS.includes(asig)?asig:'Otra'}</option>
-    </select>
-    <button class="btn-remove" onclick="this.parentElement.remove()">×</button>`;
-  container.appendChild(row);
-}
-
 function saveConfig() {
   const escuela = document.getElementById('cfgEsc').value.trim();
-  const utp = document.getElementById('cfgUtp').value.trim();
-  const anio = parseInt(document.getElementById('cfgAnio').value);
-  const meta = parseInt(document.getElementById('cfgMeta').value);
+  const utp     = document.getElementById('cfgUtp').value.trim();
+  const anio    = parseInt(document.getElementById('cfgAnio').value);
+  const meta    = parseInt(document.getElementById('cfgMeta').value);
 
   if(!escuela || !utp) { showToast("⚠️ Complete los campos obligatorios"); return; }
+
+  const obs = getObsFromRows('#cfgObservadores');
+  if(obs.length === 0) { showToast("⚠️ Debe haber al menos un observador/a"); return; }
 
   const rows = document.querySelectorAll('#cfgDocentes .docente-row');
   const docs = [];
@@ -610,6 +674,7 @@ function saveConfig() {
 
   CONFIG = { escuela, utp, anio, meta };
   DOCENTES = docs;
+  OBSERVADORES = obs;
   saveAll();
   closeConfig();
   initApp();
@@ -635,9 +700,17 @@ function initApp() {
   document.getElementById('sidebarAnio').textContent = CONFIG.anio;
   document.getElementById('metaLabel').textContent = CONFIG.meta;
   currentDate = new Date(CONFIG.anio, new Date().getMonth(), 1);
+  injectObsStyles();
+  populateObsSelect();
   renderCalendar();
   renderHeatmap();
   renderSidebar();
+}
+
+function populateObsSelect() {
+  const sel = document.getElementById('fObservador');
+  if(!sel) return;
+  sel.innerHTML = OBSERVADORES.map(o => `<option value="${o.id}">${o.nombre}</option>`).join('');
 }
 
 // =============================================
@@ -694,7 +767,7 @@ function renderCalendar() {
     let chipsHtml = "";
     dayVisitas.slice(0,3).forEach(v => {
       const doc = DOCENTES.find(d => d.id === v.docId);
-      const col = getColor(v.obs);
+      const col = getObsColor(v.obs);
       chipsHtml += `<div class="visit-chip ${col.cls}" onclick="showDetail(${v.id})"><div class="chip-dot"></div><span>${doc ? doc.nombre.split(' ')[0] : '?'}</span></div>`;
     });
     if(dayVisitas.length > 3) chipsHtml += `<div class="chip-more">+${dayVisitas.length-3} más</div>`;
@@ -735,9 +808,17 @@ function renderHeatmap() {
 // =============================================
 function renderSidebar() {
   const hoy = getHoy();
-  document.getElementById("cntUtp").textContent = VISITAS.filter(v=>v.obs==="UTP").length;
-  document.getElementById("cntDir").textContent = VISITAS.filter(v=>v.obs==="DIR").length;
-  document.getElementById("cntExt").textContent = VISITAS.filter(v=>v.obs==="EXT").length;
+
+  // Observadores dinámicos
+  const obsFilters = document.getElementById('obsFiltersList');
+  obsFilters.innerHTML = OBSERVADORES.map(o => {
+    const cnt = VISITAS.filter(v => v.obs === o.id).length;
+    return `<div class="obs-filter-item">
+      <div class="obs-dot" style="background:${o.color}"></div>
+      <span class="obs-label">${o.nombre}</span>
+      <span class="obs-count">${cnt}</span>
+    </div>`;
+  }).join('');
 
   const realizadas = VISITAS.filter(v => new Date(v.fecha) <= hoy).length;
   const pendientes = VISITAS.filter(v => new Date(v.fecha) > hoy).length;
@@ -797,7 +878,7 @@ function showDetail(visitaId) {
   const v = VISITAS.find(x => x.id === visitaId);
   if(!v) return;
   const doc = DOCENTES.find(d => d.id === v.docId);
-  const col = getColor(v.obs);
+  const col = getObsColor(v.obs);
   const fecha = new Date(v.fecha + "T12:00:00");
   const fechaStr = fecha.toLocaleDateString("es-CL", { weekday:"long", day:"numeric", month:"long", year:"numeric" });
   const isPast = fecha <= getHoy();
@@ -806,7 +887,7 @@ function showDetail(visitaId) {
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
       <div style="width:40px;height:40px;border-radius:50%;background:${doc?doc.color:'#888'};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;flex-shrink:0">${doc?getSigla(doc.nombre):'?'}</div>
       <div><div class="modal-title" style="font-size:18px;">${doc?doc.nombre:'Docente eliminado'}</div><div style="font-size:13px;color:var(--ink-soft)">${doc?doc.asignatura:''}</div></div>
-      <span class="badge ${isPast?'tag-dir':'tag-utp'}" style="margin-left:auto;">${isPast?'✓ Realizada':'⏰ Programada'}</span>
+      <span style="margin-left:auto;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;background:${isPast?'#e8f5ee':'#e8eef5'};color:${isPast?'#2d6a4f':'#1a3a5c'}">${isPast?'✓ Realizada':'⏰ Programada'}</span>
     </div>
     <div class="detail-field"><div class="detail-icon">📅</div><div><div class="detail-key">Fecha y hora</div><div class="detail-val">${fechaStr} · ${v.hora} hrs</div></div></div>
     <div class="detail-field"><div class="detail-icon">📚</div><div><div class="detail-key">Asignatura / Nivel</div><div class="detail-val">${v.asig}</div></div></div>
@@ -848,7 +929,7 @@ function showDocenteView(docId) {
   let timelineHtml = dvs.length === 0
     ? `<div class="empty-state"><h3>Sin observaciones registradas</h3><p>Este docente aún no tiene visitas al aula en el año.</p></div>`
     : dvs.map(v => {
-        const col = getColor(v.obs);
+        const col = getObsColor(v.obs);
         const fecha = new Date(v.fecha + "T12:00:00");
         const fechaStr = fecha.toLocaleDateString("es-CL", { day:"numeric", month:"long", year:"numeric" });
         const isPast = fecha <= hoy;
