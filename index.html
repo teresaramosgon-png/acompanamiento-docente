@@ -585,6 +585,21 @@ function addCfgObsRow(nombre="", color="", id=null) {
   container.appendChild(row);
 }
 
+function addCfgDocRow(nombre="", asig="", id=null) {
+  const container = document.getElementById('cfgDocentes');
+  const row = document.createElement('div');
+  row.className = 'docente-row';
+  row.dataset.id = id || '';
+  row.innerHTML = `
+    <input type="text" class="form-control" placeholder="Nombre completo" value="${nombre}" style="flex:2">
+    <select class="form-control" style="flex:1.2">
+      ${ASIGNATURAS.map(a => `<option ${a===asig?'selected':''}>${a}</option>`).join('')}
+      <option ${!ASIGNATURAS.includes(asig)?'selected':''} value="${asig||'Otra'}">${asig && !ASIGNATURAS.includes(asig)?asig:'Otra'}</option>
+    </select>
+    <button class="btn-remove" onclick="this.parentElement.remove()">×</button>`;
+  container.appendChild(row);
+}
+
 function getObsFromRows(selector) {
   return Array.from(document.querySelectorAll(selector+' .docente-row')).map((row, i) => {
     const nombre = row.querySelector('input[type=text]').value.trim();
